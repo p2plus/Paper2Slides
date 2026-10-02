@@ -380,7 +380,14 @@ class ProcessorMixin:
                     f"Using {self.config.parser} parser with method: {parse_method}"
                 )
 
-            if ext in [".pdf"]:
+            if ext in doc_parser.TEXT_FORMATS:
+                content_list = await asyncio.to_thread(
+                    doc_parser.parse_document,
+                    file_path=file_path,
+                    output_dir=output_dir,
+                    **kwargs,
+                )
+            elif ext in [".pdf"]:
                 self.logger.info("Detected PDF file, using parser for PDF...")
                 content_list = await asyncio.to_thread(_pdf_parse_with_fallback)
             elif ext in [

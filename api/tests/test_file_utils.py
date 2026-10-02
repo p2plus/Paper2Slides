@@ -12,7 +12,7 @@ def test_supported_extensions_include_batch_parser_document_formats():
     assert {".pdf", ".md", ".doc", ".docx", ".ppt", ".pptx"}.issubset(
         SUPPORTED_INPUT_EXTENSIONS
     )
-    assert ".markdown" not in SUPPORTED_INPUT_EXTENSIONS
+    assert ".markdown" in SUPPORTED_INPUT_EXTENSIONS
 
 
 def test_filter_supported_files_is_case_insensitive():
@@ -28,6 +28,7 @@ def test_filter_supported_files_is_case_insensitive():
     assert [file_record["filename"] for file_record in filtered] == [
         "notes.MD",
         "report.DOCX",
+        "notes.markdown",
     ]
     assert is_supported_input_file("presentation.PPTX")
 

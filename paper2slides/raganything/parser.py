@@ -6,7 +6,7 @@ This module provides functionality for parsing PDF and image documents using Min
 and converts the parsing results into markdown and JSON formats
 
 Note: MinerU 2.0 no longer includes LibreOffice document conversion module.
-For Office documents (.doc, .docx, .ppt, .pptx), please convert them to PDF format first.
+Markdown, text and DOCX inputs are read directly. Other Office formats require LibreOffice.
 """
 
 from __future__ import annotations
@@ -33,6 +33,8 @@ from typing import (
     Any,
     TypeVar,
 )
+
+from paper2slides.document_parser import parse_native_document
 
 from paper2slides.file_formats import (
     IMAGE_FORMATS as SHARED_IMAGE_FORMATS,
@@ -180,12 +182,18 @@ class Parser:
 
                 # Try LibreOffice commands in order of preference
                 commands_to_try = ["libreoffice", "soffice"]
+                if platform.system() == "Darwin":
+                    commands_to_try.extend([
+                        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+                        str(Path.home() / "Applications/LibreOffice.app/Contents/MacOS/soffice"),
+                    ])
 
                 conversion_successful = False
                 for cmd in commands_to_try:
                     try:
                         convert_cmd = [
                             cmd,
+                            f"-env:UserInstallation={(temp_path / 'profile').as_uri()}",
                             "--headless",
                             "--convert-to",
                             "pdf",
@@ -213,7 +221,7 @@ class Parser:
                             convert_cmd, **convert_subprocess_kwargs
                         )
 
-                        if result.returncode == 0:
+                        if result.returncode == 0 and (temp_path / f"{name_without_suff}.pdf").is_file():
                             conversion_successful = True
                             logging.info(
                                 f"Successfully converted {doc_path.name} to PDF using {cmd}"
@@ -251,7 +259,7 @@ class Parser:
                         f"Please check LibreOffice installation or try manual conversion."
                     )
 
-                pdf_path = pdf_files[0]
+                pdf_path = temp_path / f"{name_without_suff}.pdf"
                 logging.info(
                     f"Generated PDF: {pdf_path.name} ({pdf_path.stat().st_size} bytes)"
                 )
@@ -1612,9 +1620,9 @@ class MineruParser(Parser):
         **kwargs,
     ) -> List[Dict[str, Any]]:
         """
-        Parse office document by first converting to PDF, then parsing with MinerU 2.0
+        Read DOCX directly; convert other Office formats to PDF for MinerU.
 
-        Note: This method requires LibreOffice to be installed separately for PDF conversion.
+        Note: Formats other than DOCX require LibreOffice for PDF conversion.
         MinerU 2.0 no longer includes built-in Office document conversion.
 
         Supported formats: .doc, .docx, .ppt, .pptx, .xls, .xlsx
@@ -1628,6 +1636,9 @@ class MineruParser(Parser):
         Returns:
             List[Dict[str, Any]]: List of content blocks
         """
+        if Path(doc_path).suffix.lower() == ".docx":
+            return parse_native_document(doc_path, output_dir)
+
         try:
             # Convert Office document to PDF using base class method
             pdf_path = self.convert_office_to_pdf(doc_path, output_dir)
@@ -1649,9 +1660,9 @@ class MineruParser(Parser):
         **kwargs,
     ) -> List[Dict[str, Any]]:
         """
-        Parse text file by first converting to PDF, then parsing with MinerU 2.0
+        Read text and Markdown directly without PDF conversion.
 
-        Supported formats: .txt, .md
+        Supported formats: .txt, .md, .markdown
 
         Args:
             text_path: Path to the text file (.txt, .md)
@@ -1662,18 +1673,7 @@ class MineruParser(Parser):
         Returns:
             List[Dict[str, Any]]: List of content blocks
         """
-        try:
-            # Convert text file to PDF using base class method
-            pdf_path = self.convert_text_to_pdf(text_path, output_dir)
-
-            # Parse the converted PDF
-            return self.parse_pdf(
-                pdf_path=pdf_path, output_dir=output_dir, lang=lang, **kwargs
-            )
-
-        except Exception as e:
-            logging.error(f"Error in parse_text_file: {str(e)}")
-            raise
+        return parse_native_document(text_path, output_dir)
 
     def parse_document(
         self,
@@ -1859,7 +1859,9 @@ class DoclingParser(Parser):
         ext = file_path.suffix.lower()
 
         # Choose appropriate parser based on file type
-        if ext == ".pdf":
+        if ext in self.TEXT_FORMATS or ext == ".docx":
+            return parse_native_document(file_path, output_dir)
+        elif ext == ".pdf":
             return self.parse_pdf(file_path, output_dir, method, lang, **kwargs)
         elif ext in self.OFFICE_FORMATS:
             return self.parse_office_doc(file_path, output_dir, lang, **kwargs)
@@ -2131,6 +2133,9 @@ class DoclingParser(Parser):
         Returns:
             List[Dict[str, Any]]: List of content blocks
         """
+        if Path(doc_path).suffix.lower() == ".docx":
+            return parse_native_document(doc_path, output_dir)
+
         try:
             # Convert to Path object
             doc_path = Path(doc_path)

@@ -129,7 +129,7 @@ class BatchConfig:
     supported_file_extensions: List[str] = field(
         default_factory=lambda: os.getenv(
             "SUPPORTED_FILE_EXTENSIONS",
-            ".pdf,.jpg,.jpeg,.png,.bmp,.tiff,.tif,.gif,.webp,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md"
+            ".pdf,.jpg,.jpeg,.png,.bmp,.tiff,.tif,.gif,.webp,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.markdown"
         ).split(",")
     )
     """List of supported file extensions for batch processing."""

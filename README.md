@@ -145,6 +145,25 @@ There is an early Obsidian integration in [`obsidian-plugin/`](./obsidian-plugin
 - It defaults to `python3` instead of assuming a personal venv path
 - Credit for the actual generation pipeline stays with the original [HKUDS/Paper2Slides](https://github.com/HKUDS/Paper2Slides) project
 
+### Document inputs
+
+Markdown (`.md`, `.markdown`), plain text (`.txt`), and Word (`.docx`) are read
+directly on Windows, macOS, and Linux. They do not need LibreOffice or a PDF
+conversion step. Install the updated dependencies with `pip install -r requirements.txt`.
+DOCX headings, paragraphs, tables, and embedded pictures feed the same downstream
+pipeline as PDFs. Markdown keeps its source formatting and local image references.
+Text files must use UTF-8; UTF-8 with a BOM is also supported.
+
+Older Word (`.doc`), PowerPoint, and Excel files require LibreOffice:
+
+- macOS: `brew install --cask libreoffice`
+- Ubuntu/Debian: `sudo apt-get install libreoffice-writer libreoffice-impress libreoffice-calc`
+- Windows: install [LibreOffice](https://www.libreoffice.org/download/download/) and add its `program` directory to `PATH`.
+
+The Docker backend includes these converters. Mixed document uploads work as one
+project; a failed input reports its filename and error instead of generating from
+only the files that succeeded. PDF/image inputs continue to use the configured parser.
+
 ### 2. Command Line Usage
 
 ```bash
@@ -497,3 +516,14 @@ Paper2Slides/
   <em> ❤️ Thanks for visiting ✨ Paper2Slides!</em><br><br>
   <img src="https://visitor-badge.laobi.icu/badge?page_id=HKUDS.Paper2Slides&style=for-the-badge&color=00d4ff" alt="Views">
 </p>
+
+### Regression tests
+
+```bash
+pip install pytest httpx
+python -m pytest tests api/tests
+cd obsidian-plugin && npm ci && npx tsc --noEmit && npm run build && npm test
+```
+
+The upload regression tests use real Markdown/DOCX files and the actual API routes.
+Generation is replaced in those tests, so they do not call paid model APIs.
