@@ -61,28 +61,14 @@ var DEFAULT_SETTINGS = {
   localProviderBaseUrl: "http://127.0.0.1:1234/v1",
   localProviderApiKey: "",
   localProviderModel: "",
-  anythingllmBaseUrl: "http://localhost:3001/api/v1",
-  // Lend settings
-  lendEnabled: true,
-  lendDefaultFormat: "html",
-  lendIncludeSummary: true,
-  lendOptimizeForSharing: true,
-  lendGenerateQrCode: true,
-  lendOpenAfterExport: false,
-  lendHistoryLimit: 50
+  anythingllmBaseUrl: "http://localhost:3001/api/v1"
 };
 var TIMESTAMP_DIR_PATTERN = /^\d{8}_\d{6}$/;
 var Z_AI_CODING_PLAN_URL = "https://api.z.ai/api/coding/paas/v4/";
 var LM_STUDIO_BASE_URL = "http://127.0.0.1:1234/v1";
 var OLLAMA_BASE_URL = "http://localhost:11434/v1";
 var PROVIDER_REQUEST_TIMEOUT_MS = 1e4;
-var SUPPORTED_SOURCE_EXTENSIONS = [
-  "pdf", "md", "txt",
-  "doc", "docx", "ppt", "pptx", "xls", "xlsx",
-  "png", "jpeg", "jpg", "bmp", "tiff", "tif", "gif", "webp"
-];
-var GENERAL_CONTENT_EXTENSIONS = new Set(["md", "txt"]);
-var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
+var _Paper2SlidesPlugin = class _Paper2SlidesPlugin extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
     this.activeRun = null;
@@ -91,7 +77,6 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
   }
   async onload() {
     await this.loadSettings();
-    this.lendManager = new LendManager(this);
     this.addRibbonIcon("presentation", "Generate with Paper2Slides", async () => {
       const file = this.app.workspace.getActiveFile();
       if (!file || !this.isSupportedSource(file)) {
@@ -100,18 +85,6 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
       }
       await this.generateSlides(file);
     });
-    this.addRibbonIcon("share", "Lend/Share with Paper2Slides", async () => {
-      const file = this.app.workspace.getActiveFile();
-      if (!file || !this.isSupportedSource(file)) {
-        new import_obsidian.Notice("Open a supported document (PDF, MD, TXT, Office, images) first.");
-        return;
-      }
-      if (!this.settings.lendEnabled) {
-        new import_obsidian.Notice("Lend feature is disabled in settings.");
-        return;
-      }
-      await this.lendFile(file);
-    });
     this.addSettingTab(new Paper2SlidesSettingTab(this.app, this));
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
@@ -119,11 +92,6 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
           menu.addItem((item) => {
             item.setTitle("Generate Slides/Poster (Paper2Slides)").setIcon("presentation").onClick(async () => {
               await this.generateSlides(file);
-            });
-          });
-          menu.addItem((item) => {
-            item.setTitle("Lend/Share Slides/Poster (Paper2Slides)").setIcon("share").onClick(async () => {
-              await this.lendFile(file);
             });
           });
           menu.addItem((item) => {
@@ -142,48 +110,6 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
         if (file && this.isSupportedSource(file)) {
           if (!checking) {
             void this.generateSlides(file);
-          }
-          return true;
-        }
-        return false;
-      }
-    });
-    this.addCommand({
-      id: "lend-slides-current-file",
-      name: "Lend/Share Slides/Poster from current file",
-      checkCallback: (checking) => {
-        const file = this.app.workspace.getActiveFile();
-        if (file && this.isSupportedSource(file)) {
-          if (!checking) {
-            void this.lendFile(file);
-          }
-          return true;
-        }
-        return false;
-      }
-    });
-    this.addCommand({
-      id: "reimport-latest-outputs-current-file",
-      name: "Re-import latest Paper2Slides outputs for current file",
-      checkCallback: (checking) => {
-        const file = this.app.workspace.getActiveFile();
-        if (file && this.isSupportedSource(file)) {
-          if (!checking) {
-            void this.reimportLatestOutputs(file);
-          }
-          return true;
-        }
-        return false;
-      }
-    });
-    this.addCommand({
-      id: "lend-slides-current-file",
-      name: "Lend/Share Slides/Poster from current file",
-      checkCallback: (checking) => {
-        const file = this.app.workspace.getActiveFile();
-        if (file && this.isSupportedSource(file)) {
-          if (!checking) {
-            void this.lendFile(file);
           }
           return true;
         }
@@ -240,14 +166,14 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
     });
   }
   isSupportedSource(file) {
-    return SUPPORTED_SOURCE_EXTENSIONS.includes(
-      (file.extension || "").toLowerCase()
+    return _Paper2SlidesPlugin.supportedSourceExtensions.includes(
+      file.extension.toLowerCase()
     );
   }
   getContentType(file) {
-    return GENERAL_CONTENT_EXTENSIONS.has((file.extension || "").toLowerCase())
-      ? "general"
-      : "paper";
+    return _Paper2SlidesPlugin.generalContentExtensions.has(
+      file.extension.toLowerCase()
+    ) ? "general" : "paper";
   }
   getStyleArgument() {
     if (this.settings.style === "custom") {
@@ -839,28 +765,6 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
     }
     await this.importLatestOutputs(file, this.getContentType(file));
   }
-  /**
-    * Lend/share the current file's generated outputs
-    */
-  async lendFile(file) {
-    if (!this.settings.lendEnabled) {
-      new import_obsidian.Notice("Lend feature is disabled in settings.");
-      return;
-    }
-    const setupOk = await this.runSetupCheck(false);
-    if (!setupOk) {
-      await this.runSetupCheck(true);
-      return;
-    }
-    const lendOptions = {
-      format: this.settings.lendDefaultFormat,
-      includeSummary: this.settings.lendIncludeSummary,
-      optimizeForSharing: this.settings.lendOptimizeForSharing,
-      generateQrCode: this.settings.lendGenerateQrCode,
-      openAfterExport: this.settings.lendOpenAfterExport
-    };
-    await this.lendManager.lendFile(file, lendOptions);
-  }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
@@ -868,6 +772,30 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
     await this.saveData(this.settings);
   }
 };
+// Keep in sync with paper2slides/file_formats.py (SUPPORTED_FILE_EXTENSIONS),
+// which the API adopts since the document-input-formats fix.
+_Paper2SlidesPlugin.supportedSourceExtensions = [
+  "pdf",
+  "md",
+  "markdown",
+  "txt",
+  "doc",
+  "docx",
+  "ppt",
+  "pptx",
+  "xls",
+  "xlsx",
+  "png",
+  "jpeg",
+  "jpg",
+  "bmp",
+  "tiff",
+  "tif",
+  "gif",
+  "webp"
+];
+_Paper2SlidesPlugin.generalContentExtensions = /* @__PURE__ */ new Set(["md", "markdown", "txt"]);
+var Paper2SlidesPlugin = _Paper2SlidesPlugin;
 var Paper2SlidesSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -1076,36 +1004,6 @@ var Paper2SlidesSettingTab = class extends import_obsidian.PluginSettingTab {
     }));
     new import_obsidian.Setting(containerEl).setName("Save run log").setDesc("Write last-run.log into the imported output folder.").addToggle((toggle) => toggle.setValue(this.plugin.settings.saveRunLog).onChange(async (value) => {
       this.plugin.settings.saveRunLog = value;
-      await this.plugin.saveSettings();
-    }));
-    containerEl.createEl("h3", { text: "Lend/Share" });
-    new import_obsidian.Setting(containerEl).setName("Enable lend feature").setDesc("Allow sharing/generating lendable outputs from generated slides/posters").addToggle((toggle) => toggle.setValue(this.plugin.settings.lendEnabled).onChange(async (value) => {
-      this.plugin.settings.lendEnabled = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Default lend format").setDesc("Default format for lending/sharing outputs").addDropdown((dropdown) => dropdown.addOption("html", "HTML (web-viewable)").addOption("pdf", "PDF document").addOption("png", "PNG images").addOption("zip", "ZIP archive").setValue(this.plugin.settings.lendDefaultFormat).onChange(async (value) => {
-      this.plugin.settings.lendDefaultFormat = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Include summary in lend").setDesc("Include the extracted summary.md when lending").addToggle((toggle) => toggle.setValue(this.plugin.settings.lendIncludeSummary).onChange(async (value) => {
-      this.plugin.settings.lendIncludeSummary = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Optimize for sharing").setDesc("Apply optimizations to reduce file size when lending").addToggle((toggle) => toggle.setValue(this.plugin.settings.lendOptimizeForSharing).onChange(async (value) => {
-      this.plugin.settings.lendOptimizeForSharing = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Generate QR code").setDesc("Create QR code for easy sharing of lent content").addToggle((toggle) => toggle.setValue(this.plugin.settings.lendGenerateQrCode).onChange(async (value) => {
-      this.plugin.settings.lendGenerateQrCode = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Open after export").setDesc("Automatically open the lent file after exporting").addToggle((toggle) => toggle.setValue(this.plugin.settings.lendOpenAfterExport).onChange(async (value) => {
-      this.plugin.settings.lendOpenAfterExport = value;
-      await this.plugin.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("History limit").setDesc("Maximum number of lending events to keep in history").addText((text) => text.setPlaceholder("50").setValue(String(this.plugin.settings.lendHistoryLimit)).onChange(async (value) => {
-      const parsed = Number.parseInt(value, 10);
-      this.plugin.settings.lendHistoryLimit = Number.isFinite(parsed) && parsed > 0 ? parsed : 50;
       await this.plugin.saveSettings();
     }));
     containerEl.createEl("h3", { text: "Where to use it" });

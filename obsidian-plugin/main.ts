@@ -206,12 +206,12 @@ export default class Paper2SlidesPlugin extends Plugin {
 	// Keep in sync with paper2slides/file_formats.py (SUPPORTED_FILE_EXTENSIONS),
 	// which the API adopts since the document-input-formats fix.
 	static readonly supportedSourceExtensions: readonly string[] = [
-		'pdf', 'md', 'txt',
+		'pdf', 'md', 'markdown', 'txt',
 		'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx',
 		'png', 'jpeg', 'jpg', 'bmp', 'tiff', 'tif', 'gif', 'webp',
 	];
 
-	private static readonly generalContentExtensions = new Set(['md', 'txt']);
+	private static readonly generalContentExtensions = new Set(['md', 'markdown', 'txt']);
 
 	isSupportedSource(file: TFile): boolean {
 		return Paper2SlidesPlugin.supportedSourceExtensions.includes(

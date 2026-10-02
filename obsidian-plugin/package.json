@@ -1,12 +1,13 @@
 {
   "name": "paper2slides-obsidian",
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "Run Paper2Slides from Obsidian, track the local pipeline, and import the latest outputs back into your vault.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production",
-    "version": "node version-bump.mjs && git add manifest.json versions.json"
+    "version": "node version-bump.mjs && git add manifest.json versions.json",
+    "test": "node --test tests/*.test.cjs"
   },
   "keywords": [
     "obsidian",
