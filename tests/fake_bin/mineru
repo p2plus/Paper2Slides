@@ -1,0 +1,18 @@
+#!/bin/sh
+# Fake mineru binary for issue #29 hang tests.
+# Answers --help immediately (legacy CLI style) so MineruParser._detect_mineru_cli()
+# does not stall on it; a real parse request (-p ... -o ...) then sleeps forever
+# to emulate the issue #29 hang.
+for a in "$@"; do
+  case "$a" in
+    --help|-h)
+      cat <<'HELPEOF'
+usage: mineru [-h] [-p PATH] [-o DIR] [-m METHOD]
+legacy CLI: options -p/--path -o/--output -m/--method are supported.
+HELPEOF
+      exit 0
+      ;;
+  esac
+done
+echo "[MinerU] fake mineru starting long OCR run on: $@"
+exec sleep 300

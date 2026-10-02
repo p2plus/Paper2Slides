@@ -1,0 +1,14 @@
+#!/bin/sh
+out=""; next=0; input=""
+for a in "$@"; do
+  if [ "$next" = "1" ]; then out="$a"; next=0; continue; fi
+  case "$a" in
+    --output) next=1 ;;
+    --to|--json|--md) : ;;
+    *) input="$a" ;;
+  esac
+done
+base=$(basename "$input" .pdf)
+dir="$out/$base/docling"
+mkdir -p "$dir"
+printf '# Fake docling fallback output\n' > "$dir/$base.md"
