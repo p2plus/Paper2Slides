@@ -2,7 +2,7 @@
 # RAG Core
 huggingface_hub
 lightrag-hku
-mineru[core]==2.6.4
+mineru[core]>=2.6.4
 tqdm
 
 # Image Processing

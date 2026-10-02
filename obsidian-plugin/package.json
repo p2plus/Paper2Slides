@@ -1,0 +1,30 @@
+{
+  "name": "paper2slides-obsidian",
+  "version": "1.1.0",
+  "description": "Run Paper2Slides from Obsidian, track the local pipeline, and import the latest outputs back into your vault.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "slides",
+    "paper2slides",
+    "presentation"
+  ],
+  "author": "p2plus",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^16.11.29",
+    "@typescript-eslint/eslint-plugin": "^5.29.0",
+    "@typescript-eslint/parser": "^5.29.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.28.0",
+    "obsidian": "latest",
+    "tslib": "2.4.0",
+    "typescript": "4.9.5"
+  }
+}

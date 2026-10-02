@@ -1,0 +1,10 @@
+{
+  "id": "paper2slides-obsidian",
+  "name": "Paper2Slides Obsidian",
+  "version": "1.2.0",
+  "minAppVersion": "0.15.0",
+  "description": "Run Paper2Slides from Obsidian, track the local pipeline, and import the latest outputs back into your vault. Now includes lend/share functionality for easy distribution of generated slides and posters.",
+  "author": "p2plus",
+  "authorUrl": "https://github.com/p2plus",
+  "isDesktopOnly": true
+}

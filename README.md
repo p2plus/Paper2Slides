@@ -136,6 +136,14 @@ pip install -r requirements.txt
 > [!NOTE]
 > Create a `.env` file in `paper2slides/` directory with your API keys. Refer to `paper2slides/.env.example` for the required variables.
 
+### Obsidian Plugin
+
+There is an early Obsidian integration in [`obsidian-plugin/`](./obsidian-plugin) for running Paper2Slides against a PDF or Markdown note from inside your vault.
+
+- It shells out to your local Python install, so it is desktop-only
+- It defaults to `python3` instead of assuming a personal venv path
+- Credit for the actual generation pipeline stays with the original [HKUDS/Paper2Slides](https://github.com/HKUDS/Paper2Slides) project
+
 ### 2. Command Line Usage
 
 ```bash
