@@ -297,7 +297,6 @@ outputs/
 | `doraemon` | Colorful, friendly style with illustrations |
 | `custom` | Any text description for LLM-generated style |
 
-<<<<<<< HEAD
 ### 🤖 Local & Non-OpenAI Endpoints
 
 Paper2Slides works with any **OpenAI-compatible** endpoint — run the whole pipeline fully local with [Ollama](https://ollama.com), LM Studio, vLLM, llama.cpp server, or SGLang, or use cloud providers like DeepSeek. [Issue #33](https://github.com/HKUDS/Paper2Slides/issues/33), [Issue #37](https://github.com/HKUDS/Paper2Slides/issues/37)
