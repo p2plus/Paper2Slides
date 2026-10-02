@@ -90,6 +90,17 @@ class ParserConfig:
     parse_method: str = field(default_factory=lambda: os.getenv("PARSE_METHOD", "auto"))
     """Method: 'auto', 'ocr', or 'txt'."""
     
+    parse_timeout_s: int = field(
+        default_factory=lambda: int(os.getenv("PARSE_TIMEOUT_S", "1800"))
+    )
+    """Hard deadline for the parser subprocess in seconds (0 = no deadline)."""
+
+    parse_fallback_enabled: bool = field(
+        default_factory=lambda: os.getenv("PARSE_FALLBACK_ENABLED", "true").lower()
+        == "true"
+    )
+    """Retry PDF parsing once with the other parser after a failure/timeout."""
+
     display_content_stats: bool = field(
         default_factory=lambda: os.getenv("DISPLAY_CONTENT_STATS", "true").lower() == "true"
     )
@@ -218,9 +229,11 @@ class RAGConfig:
             # Storage
             working_dir=self.storage.storage_dir,
             parser_output_dir=self.storage.output_dir,
-            # Parser
+            # Parser (issue #29: parser choice + deadline + fallback)
             parser=self.parser.parser,
             parse_method=self.parser.parse_method,
+            parse_timeout_s=self.parser.parse_timeout_s,
+            parse_fallback_enabled=self.parser.parse_fallback_enabled,
             display_content_stats=self.parser.display_content_stats,
             enable_image_processing=self.parser.enable_image_processing,
             enable_table_processing=self.parser.enable_table_processing,

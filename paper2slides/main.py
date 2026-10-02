@@ -60,6 +60,9 @@ def main():
                         help="Enable debug logging")
     parser.add_argument("--fast", action="store_true",
                         help="Fast mode: parse only, no RAG indexing (direct LLM query)")
+    parser.add_argument("--skip-parsing", action="store_true",
+                        help="Skip PDF parsing (issue #29): input must be pre-parsed "
+                             "markdown (.md/.txt) or MinerU content JSON")
     parser.add_argument("--parallel", type=int, nargs='?', const=2, default=None,
                         help="Enable parallel slide generation with N workers (default: 2 if specified)")
     
@@ -99,6 +102,7 @@ def main():
         "slides_length": args.length,
         "poster_density": args.density,
         "fast_mode": args.fast,
+        "skip_parsing": getattr(args, "skip_parsing", False),
         "max_workers": args.parallel if args.parallel else 1,
     }
     

@@ -286,11 +286,15 @@ async def run_rag_stage(base_dir: Path, config: Dict) -> Dict:
         
         # Parse documents to generate markdown
         batch_parser = BatchParser(
-            parser_type="mineru",
+            parser_type=None,  # resolve from PARSER env var (issue #29)
             max_workers=4,
             show_progress=True,
             skip_installation_check=True,
+            skip_parsing=config.get("skip_parsing", False),
         )
+        logger.info(f"  Parser: {batch_parser.parser_type}")
+        if batch_parser.skip_parsing:
+            logger.info("  SKIP_PARSING active: inputs must be pre-parsed .md/.txt/content JSON")
         
         if path.is_file():
             logger.info(f"Parsing file: {path.name}")

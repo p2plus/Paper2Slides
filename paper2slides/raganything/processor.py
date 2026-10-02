@@ -316,25 +316,73 @@ class ProcessorMixin:
         # Choose appropriate parsing method based on file extension
         ext = file_path.suffix.lower()
 
-        try:
-            doc_parser = (
-                DoclingParser() if self.config.parser == "docling" else MineruParser()
-            )
+        def _pdf_parse_with_fallback() -> List[Dict[str, Any]]:
+            """PDF parsing with one-shot cross-parser fallback (issue #29).
 
-            # Log parser and method information
-            self.logger.info(
-                f"Using {self.config.parser} parser with method: {parse_method}"
+            Tries the configured parser first; on failure or subprocess timeout
+            it retries once with the alternate parser while the parser-level
+            deadline (PARSE_TIMEOUT_S) guarantees termination.
+            """
+            primary = (
+                MineruParser if self.config.parser != "mineru" else DoclingParser
             )
+            alternate = DoclingParser if primary is MineruParser else MineruParser
+            primary_name = "mineru" if primary is MineruParser else "docling"
+            alternate_name = "docling" if alternate is DoclingParser else "mineru"
 
-            if ext in [".pdf"]:
-                self.logger.info("Detected PDF file, using parser for PDF...")
-                content_list = await asyncio.to_thread(
-                    doc_parser.parse_pdf,
+            if not self.config.parse_fallback_enabled:
+                self.logger.info(
+                    f"Using {primary_name} parser (fallback disabled) with "
+                    f"method: {parse_method}"
+                )
+                return primary().parse_pdf(
                     pdf_path=file_path,
                     output_dir=output_dir,
                     method=parse_method,
                     **kwargs,
                 )
+
+            try:
+                self.logger.info(
+                    f"Using {primary_name} parser with method: {parse_method}"
+                )
+                return primary().parse_pdf(
+                    pdf_path=file_path,
+                    output_dir=output_dir,
+                    method=parse_method,
+                    **kwargs,
+                )
+            except Exception as primary_error:
+                self.logger.error(
+                    f"{primary_name} parser failed on PDF ({primary_error})"
+                )
+                if isinstance(primary_error, FileNotFoundError):
+                    raise
+
+            self.logger.warning(
+                f"Falling back to {alternate_name} parser for {file_path.name}"
+            )
+            return alternate().parse_pdf(
+                pdf_path=file_path,
+                output_dir=output_dir,
+                method=parse_method,
+                **kwargs,
+            )
+
+        try:
+            doc_parser = (
+                DoclingParser() if self.config.parser == "docling" else MineruParser()
+            )
+
+            if ext != ".pdf":
+                # PDF parsing logs the same line inside _pdf_parse_with_fallback
+                self.logger.info(
+                    f"Using {self.config.parser} parser with method: {parse_method}"
+                )
+
+            if ext in [".pdf"]:
+                self.logger.info("Detected PDF file, using parser for PDF...")
+                content_list = await asyncio.to_thread(_pdf_parse_with_fallback)
             elif ext in [
                 ".jpg",
                 ".jpeg",
@@ -345,6 +393,9 @@ class ProcessorMixin:
                 ".gif",
                 ".webp",
             ]:
+                self.logger.info(
+                    f"Using {self.config.parser} parser with method: {parse_method}"
+                )
                 self.logger.info("Detected image file, using parser for images...")
                 # Use the selected parser's image parsing capability
                 if hasattr(doc_parser, "parse_image"):

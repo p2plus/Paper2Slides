@@ -14,6 +14,8 @@ const ConfigPanel = ({
   setDensity,
   fastMode = false,
   setFastMode,
+  skipParsing = false,
+  setSkipParsing,
   compact = false,
   onRegenerate,
   isLoading = false
@@ -424,6 +426,25 @@ const ConfigPanel = ({
                   value={density}
                   onChange={setDensity}
                 />
+              )}
+
+              {/* Skip Parsing checkbox (issue #29): pre-parsed input instead of PDF parsing */}
+              {setSkipParsing && (
+                <div className="flex items-center gap-3">
+                  <input
+                    id="p2s-skip-parsing"
+                    type="checkbox"
+                    checked={skipParsing}
+                    onChange={(e) => setSkipParsing(e.target.checked)}
+                    className="w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-400 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <label htmlFor="p2s-skip-parsing" className="text-sm text-gray-700 dark:text-gray-300">
+                    Skip PDF parsing{' '}
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      (input is pre-parsed markdown/text instead of a PDF)
+                    </span>
+                  </label>
+                </div>
               )}
             </div>
 

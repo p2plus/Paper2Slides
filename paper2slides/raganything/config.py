@@ -29,6 +29,16 @@ class RAGAnythingConfig:
     parser: str = field(default=get_env_value("PARSER", "mineru", str))
     """Parser selection: 'mineru' or 'docling'."""
 
+    parse_timeout_s: int = field(default=get_env_value("PARSE_TIMEOUT_S", 1800, int))
+    """Hard deadline in seconds for the mineru/docling subprocess (issue #29 hangs
+    blocked pipelines forever). 0 disables the deadline."""
+
+    parse_fallback_enabled: bool = field(
+        default=get_env_value("PARSE_FALLBACK_ENABLED", True, bool)
+    )
+    """On PDF failure/timeout of the primary parser, retry once with the other
+    parser before giving up."""
+
     display_content_stats: bool = field(
         default=get_env_value("DISPLAY_CONTENT_STATS", True, bool)
     )
