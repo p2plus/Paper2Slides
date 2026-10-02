@@ -297,6 +297,7 @@ outputs/
 | `doraemon` | Colorful, friendly style with illustrations |
 | `custom` | Any text description for LLM-generated style |
 
+<<<<<<< HEAD
 ### 🤖 Local & Non-OpenAI Endpoints
 
 Paper2Slides works with any **OpenAI-compatible** endpoint — run the whole pipeline fully local with [Ollama](https://ollama.com), LM Studio, vLLM, llama.cpp server, or SGLang, or use cloud providers like DeepSeek. [Issue #33](https://github.com/HKUDS/Paper2Slides/issues/33), [Issue #37](https://github.com/HKUDS/Paper2Slides/issues/37)
@@ -355,6 +356,16 @@ python -m paper2slides --input paper.pdf --output slides --fast
 
 > [!TIP]
 > `EMBEDDING_DIM` must match your embedding model (`nomic-embed-text` → 768). A mismatch breaks RAG vector storage — when switching models, start fresh with `--from-stage rag` (or delete the `rag_storage/` dir of your output).
+
+### Figure Curation (Preserve Mode)
+
+| `FIGURE_MODE` | Behavior |
+|---------------|----------|
+| unset (default) | Reference figures are **redrawn** to match the slide/poster style |
+| `preserve` | Published figures pass through **pixel-faithful** — no redrawing, restyling or recoloring; only layout, captions and text adapt |
+
+> [!TIP]
+> Set `FIGURE_MODE=preserve` in `paper2slides/.env` when the figures ARE the content — systematic reviews, clinical evidence decks, or any paper where redrawing published panels would falsify the data. Original axes, scale bars, legends and panel labels are preserved unchanged.
 
 ### Image Generation Providers
 
