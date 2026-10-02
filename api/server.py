@@ -451,7 +451,8 @@ def _update_state_on_error(
     density: Optional[str],
     fast_mode: bool,
     skip_parsing: bool,
-    session_manager: Optional[SessionManager] = None
+    session_manager: Optional[SessionManager] = None,
+    message: str = "",
 ):
     """Update state.json when background pipeline fails"""
     from paper2slides.core.state import load_state, save_state
@@ -472,11 +473,17 @@ def _update_state_on_error(
     
     # Build config to find config_dir
     PREDEFINED_STYLES = {"academic", "doraemon"}
-    style_type = style.lower() if style.lower() in PREDEFINED_STYLES else "custom"
+    custom_style = message.strip() if message and message.strip() else None
+    style_type = "custom" if custom_style else (
+        style.lower() if style.lower() in PREDEFINED_STYLES else "custom"
+    )
+    if style_type == "custom" and not custom_style:
+        custom_style = style
     
     config = {
         "output_type": output_type,
         "style": style_type,
+        "custom_style": custom_style,
         "slides_length": length or "medium",
         "poster_density": density or "medium",
         "fast_mode": fast_mode if content == "paper" else False,
@@ -551,7 +558,7 @@ async def run_pipeline_background(
         
         # Also update the state.json file to reflect the failure
         try:
-            _update_state_on_error(session_id, str(e), files, content, output_type, style, length, density, fast_mode, skip_parsing)
+            _update_state_on_error(session_id, str(e), files, content, output_type, style, length, density, fast_mode, skip_parsing, message=message)
         except Exception as state_err:
             logger.error(f"Failed to update state file: {state_err}")
     finally:

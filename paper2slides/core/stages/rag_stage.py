@@ -352,6 +352,10 @@ async def run_rag_stage(base_dir: Path, config: Dict) -> Dict:
             f"{len(parse_result.failed_files)} failed"
         )
         
+        if parse_result.failed_files:
+            reasons = " | ".join(parse_result.errors.values())
+            raise ValueError(f"Document parsing failed: {reasons}")
+
         # Collect markdown files written by the parser.
         markdown_paths = _collect_markdown_files(output_dir)
         if not markdown_paths:

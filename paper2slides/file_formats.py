@@ -4,7 +4,7 @@ OFFICE_FORMATS = frozenset({".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx"})
 IMAGE_FORMATS = frozenset(
     {".png", ".jpeg", ".jpg", ".bmp", ".tiff", ".tif", ".gif", ".webp"}
 )
-TEXT_FORMATS = frozenset({".txt", ".md"})
+TEXT_FORMATS = frozenset({".txt", ".md", ".markdown"})
 
 SUPPORTED_FILE_EXTENSIONS = frozenset(
     {".pdf"} | OFFICE_FORMATS | IMAGE_FORMATS | TEXT_FORMATS
