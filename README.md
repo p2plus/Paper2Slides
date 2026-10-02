@@ -112,6 +112,7 @@ Examples from <a href="https://arxiv.org/abs/2512.02556">DeepSeek-V3.2: Pushing 
 - [🎯 Quick Start](#-quick-start)
 - [🏗️ Paper2Slides Framework](#%EF%B8%8F-paper2slides-framework)
 - [🔧 Configuration](#%EF%B8%8F-configuration)
+- [🤖 Using a Local LLM](#-using-a-local-llm)
 - [📁 Code Structure](#-code-structure)
 
 ---
@@ -297,9 +298,34 @@ outputs/
 | `doraemon` | Colorful, friendly style with illustrations |
 | `custom` | Any text description for LLM-generated style |
 
-### DeepSeek & Other OpenAI-Compatible Endpoints
+### 🤖 Local & Non-OpenAI Endpoints
 
-Works the same as the OpenAI default — point `RAG_LLM_BASE_URL` at the endpoint and name the model via `LLM_MODEL` so **every** stage uses it:
+Paper2Slides works with any **OpenAI-compatible** endpoint — run the whole pipeline fully local with [Ollama](https://ollama.com), LM Studio, vLLM, llama.cpp server, or SGLang, or use cloud providers like DeepSeek. [Issue #33](https://github.com/HKUDS/Paper2Slides/issues/33), [Issue #37](https://github.com/HKUDS/Paper2Slides/issues/37)
+
+Configure `paper2slides/.env` (Ollama example):
+
+```env
+# Chat LLM (RAG queries, summary, content planning)
+RAG_LLM_BASE_URL="http://localhost:11434/v1"
+LLM_MODEL="qwen2.5:14b"
+RAG_LLM_API_KEY=""     # can stay empty for local servers
+
+# Embeddings (used by RAG indexing, normal mode only)
+EMBEDDING_MODEL="nomic-embed-text"
+EMBEDDING_DIM="768"    # must match the embedding model's native dimension
+
+# max_tokens: fit your model's context window (default 16000)
+RAG_LLM_MAX_TOKENS="8192"
+```
+
+| Model role | Env vars | Notes |
+|------------|----------|-------|
+| Chat / summary / planning | `RAG_LLM_BASE_URL`, `LLM_MODEL`, `RAG_LLM_API_KEY` | Any OpenAI-compatible server |
+| Embeddings (RAG indexing) | `EMBEDDING_MODEL`, `EMBEDDING_DIM` | Required for normal mode; `--fast` skips RAG indexing |
+| `--fast` mode queries | same as chat | Needs a **vision** model (e.g. `qwen2.5-vl`, `llama3.2-vision`) — document images are sent inline |
+| Image generation | `IMAGE_GEN_*` | Always requires an image-capable model; openrouter provider accepts any OpenAI-compatible base URL |
+
+DeepSeek and other cloud endpoints work the same way — point `RAG_LLM_BASE_URL` at the endpoint and name the model via `LLM_MODEL` so **every** stage uses it:
 
 ```env
 RAG_LLM_API_KEY="sk-..."
@@ -339,6 +365,36 @@ RAG_LLM_MAX_TOKENS="8192"
 > [!TIP]
 > For a 40-page arXiv paper on a Mac without GPU, `PARSER=docling` plus the
 > default deadline usually finishes in minutes where MinerU used to hang.
+
+> [!NOTE]
+> `LLM_MODEL` now applies to **every** stage — RAG queries, summary extraction, content planning, and custom-style parsing. Previously some stages hardcoded `gpt-4o-mini` / `gpt-4o` and crashed with local models. Custom-style parsing also retries without JSON mode for endpoints that don't support `response_format`.
+
+Example:
+
+```bash
+# Serve models (Ollama example)
+ollama pull qwen2.5:14b
+ollama pull nomic-embed-text
+
+# Fully local run, normal mode (RAG pipeline)
+python -m paper2slides --input paper.pdf --output slides --length medium
+
+# Fully local run, fast mode (needs a local vision model, no embeddings)
+python -m paper2slides --input paper.pdf --output slides --fast
+```
+
+> [!TIP]
+> `EMBEDDING_DIM` must match your embedding model (`nomic-embed-text` → 768). A mismatch breaks RAG vector storage — when switching models, start fresh with `--from-stage rag` (or delete the `rag_storage/` dir of your output).
+
+### Figure Curation (Preserve Mode)
+
+| `FIGURE_MODE` | Behavior |
+|---------------|----------|
+| unset (default) | Reference figures are **redrawn** to match the slide/poster style |
+| `preserve` | Published figures pass through **pixel-faithful** — no redrawing, restyling or recoloring; only layout, captions and text adapt |
+
+> [!TIP]
+> Set `FIGURE_MODE=preserve` in `paper2slides/.env` when the figures ARE the content — systematic reviews, clinical evidence decks, or any paper where redrawing published panels would falsify the data. Original axes, scale bars, legends and panel labels are preserved unchanged.
 
 ### Image Generation Providers
 
