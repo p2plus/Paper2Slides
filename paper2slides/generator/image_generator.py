@@ -106,7 +106,6 @@ ATLAS_POLL_TIMEOUT = 600
 # api.atlascloud.ai answers some clients' default User-Agent with 403 (error
 # code 1010), so every request sends an explicit one.
 ATLAS_USER_AGENT = "paper2slides/1"
-ATLAS_ASPECT_RATIO = os.getenv("IMAGE_GEN_ASPECT_RATIO", "16:9")
 
 
 class ImageGenerator:
@@ -530,9 +529,9 @@ class ImageGenerator:
     def _call_model_atlas(self, prompt: str, reference_images: List[dict]) -> tuple:
         """Call Atlas Cloud's media API: submit a job, poll it, return the bytes.
 
-        Reference images travel in one newline-separated `images` field, and the
-        model id selects the task, so a run with references switches to the
-        model's edit task.
+        Reference images travel as the documented `images` array of data URLs
+        (schema of the edit models), and the model id selects the task, so a
+        run with references switches to the model's edit task.
         """
         logger = logging.getLogger(__name__)
         base_url = self.base_url.rstrip("/")
@@ -549,18 +548,32 @@ class ImageGenerator:
             if img.get("base64") and img.get("mime_type")
         ]
         if images and not model.endswith(ATLAS_EDIT_SUFFIX):
-            model = model.rsplit("/", 1)[0] + ATLAS_EDIT_SUFFIX
+            # The model id selects the task. Verified against Atlas's model
+            # list: swap the task segment of a vendor/model/task id
+            # (google/nano-banana-pro/text-to-image -> google/nano-banana-pro/edit),
+            # append the task otherwise (bytedance/seedream-v4 ->
+            # bytedance/seedream-v4/edit). The earlier vendor-only swap
+            # produced the nonexistent id bytedance/edit.
+            parts = model.split("/")
+            if len(parts) == 3:
+                parts[2] = "edit"
+                model = "/".join(parts)
+            else:
+                model = model + ATLAS_EDIT_SUFFIX
 
         payload = {"model": model, "prompt": prompt}
         # Measured: nano-banana models ignore `size` and honour `aspect_ratio`,
         # while seedream models honour `size` (and reject anything under
         # 921600 pixels). Send the one the configured model actually reads.
         if "nano-banana" in model:
-            payload["aspect_ratio"] = ATLAS_ASPECT_RATIO
+            payload["aspect_ratio"] = os.getenv("IMAGE_GEN_ASPECT_RATIO", "16:9")
         elif os.getenv("IMAGE_GEN_SIZE"):
             payload["size"] = os.getenv("IMAGE_GEN_SIZE").replace("x", "*")
         if images:
-            payload["images"] = "\n".join(images)
+            # Documented schema is `images: array[string]` (max 10 entries).
+            # A newline-joined string only worked by API leniency and breaks
+            # multi-image runs (slides send style-ref + figures).
+            payload["images"] = images
 
         max_retries = 3
         retry_delay = 2  # seconds
