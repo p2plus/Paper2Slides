@@ -6,7 +6,7 @@ import base64
 import re
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from openai import OpenAI
 
 from .config import GenerationInput, OutputType
@@ -124,7 +124,6 @@ class ContentPlanner:
         self.base_url = base_url or os.getenv("RAG_LLM_BASE_URL")
         self.model = model or get_llm_model(default="gpt-4o")
         # max_tokens: default 16000, override via RAG_LLM_MAX_TOKENS env or constructor
-        # Note: deepseek has 8192 limit, set RAG_LLM_MAX_TOKENS=8192 if using deepseek
         self.max_tokens = max_tokens or int(os.getenv("RAG_LLM_MAX_TOKENS", "16000"))
         
         kwargs = {"api_key": self.api_key}

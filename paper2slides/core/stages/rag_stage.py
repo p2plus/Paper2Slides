@@ -126,7 +126,8 @@ async def _run_fast_queries_by_category(
     max_concurrency: int = 10,
 ) -> Dict[str, List[Dict]]:
     """
-    Fast mode: Direct GPT-4o queries with markdown content and images in original positions
+    Fast mode: Direct LLM queries with markdown content and images in original positions
+    (model must be vision-capable, e.g. gpt-4o; local servers need a VL model like qwen2.5-vl)
     
     Args:
         client: OpenAI client
