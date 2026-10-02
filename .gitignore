@@ -61,3 +61,7 @@ outputs/
 # Temporary and test files
 debug.*
 test.*
+
+# Issue #29 test scaffolding
+tests/fake_bin/
+.venv-test/

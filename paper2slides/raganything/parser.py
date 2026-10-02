@@ -15,8 +15,12 @@ from __future__ import annotations
 import json
 import argparse
 import base64
+import os
+import platform
+import signal
 import subprocess
 import tempfile
+import time
 import logging
 from pathlib import Path
 from typing import (
@@ -41,6 +45,62 @@ class MineruExecutionError(Exception):
         super().__init__(
             f"Mineru command failed with return code {return_code}: {error_msg}"
         )
+
+
+def _get_parse_timeout_s() -> int:
+    """Resolve the parser subprocess deadline in seconds (PARSE_TIMEOUT_S).
+
+    Read from the environment directly so both direct CLI usage (no config
+    object) and pipeline mode (RAGAnythingConfig) pick up the same value.
+    0 disables the deadline.
+    """
+    raw = os.getenv("PARSE_TIMEOUT_S")
+    if raw is None or not str(raw).strip():
+        return 1800
+    try:
+        return max(int(str(raw).strip()), 0)
+    except ValueError:
+        logging.warning(
+            "Invalid PARSE_TIMEOUT_S=%r - falling back to default 1800s", raw
+        )
+        return 1800
+
+
+def _kill_process_tree(process: "subprocess.Popen", grace: float = 5.0) -> None:
+    """Best-effort termination of a parser subprocess and its children.
+
+    MinerU model workers are separate processes; killing only the parent would
+    leave GPU/CPU workers behind, so terminate the whole process group first
+    (POSIX process group / Windows taskkill /T).
+    """
+    if process.poll() is not None:
+        return
+    try:
+        if platform.system() == "Windows":
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                    capture_output=True,
+                    timeout=grace,
+                )
+            except Exception:
+                process.kill()
+        else:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        try:
+            process.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            try:
+                if platform.system() == "Windows":
+                    process.kill()
+                else:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                process.wait(timeout=grace)
+            except Exception:
+                pass
+    except Exception as e:
+        logging.warning("Failed to terminate hung parser subprocess: %s", e)
+
 
 
 class Parser:
@@ -665,6 +725,10 @@ class MineruParser(Parser):
                 "errors": "ignore",
                 "bufsize": 1,  # Line buffered
             }
+            # New process group on POSIX so the whole mineru tree (model
+            # workers included) can be killed on timeout (issue #29).
+            if platform.system() != "Windows":
+                subprocess_kwargs["start_new_session"] = True
 
             # Hide console window on Windows
             if platform.system() == "Windows":
@@ -700,6 +764,11 @@ class MineruParser(Parser):
             stdout_thread.start()
             stderr_thread.start()
 
+            # Issue #29: enforce a hard deadline so a hung mineru run can never
+            # block the pipeline forever. PARSE_TIMEOUT_S=0 disables the deadline.
+            timeout_s = _get_parse_timeout_s()
+            started_at = time.monotonic()
+
             # Process output in real time
             while process.poll() is None:
                 # Check stdout queue
@@ -728,9 +797,21 @@ class MineruParser(Parser):
                 except Empty:
                     pass
 
-                # Small delay to prevent busy waiting
-                import time
+                if timeout_s > 0 and time.monotonic() - started_at >= timeout_s:
+                    logging.error(
+                        f"[MinerU] Parsing exceeded PARSE_TIMEOUT_S={timeout_s}s - "
+                        f"terminating hung subprocess (pid {process.pid})"
+                    )
+                    _kill_process_tree(process)
+                    return_code = process.wait()
+                    if return_code == 0:
+                        return_code = 124  # POSIX timeout(1) convention
+                    raise MineruExecutionError(
+                        return_code,
+                        [f"MinerU timed out after {timeout_s}s (PARSE_TIMEOUT_S)"],
+                    )
 
+                # Small delay to prevent busy waiting
                 time.sleep(0.1)
 
             # Process any remaining output after process completion
@@ -1386,13 +1467,35 @@ class DoclingParser(Parser):
             if platform.system() == "Windows":
                 docling_subprocess_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
 
-            result_json = subprocess.run(cmd_json, **docling_subprocess_kwargs)
-            result_md = subprocess.run(cmd_md, **docling_subprocess_kwargs)
+            # Issue #29: shared hard deadline (PARSE_TIMEOUT_S) across both
+            # docling invocations instead of letting each run forever.
+            deadline_s = _get_parse_timeout_s()
+            started_at = time.monotonic()
+
+            def _remaining() -> Optional[float]:
+                if deadline_s <= 0:
+                    return None
+                left = deadline_s - (time.monotonic() - started_at)
+                return left if left > 0 else 0.01
+
+            result_json = subprocess.run(
+                cmd_json, timeout=_remaining(), **docling_subprocess_kwargs
+            )
+            result_md = subprocess.run(
+                cmd_md, timeout=_remaining(), **docling_subprocess_kwargs
+            )
             logging.info("Docling command executed successfully")
             if result_json.stdout:
                 logging.debug(f"JSON cmd output: {result_json.stdout}")
             if result_md.stdout:
                 logging.debug(f"Markdown cmd output: {result_md.stdout}")
+        except subprocess.TimeoutExpired:
+            logging.error(
+                f"[Docling] docling command exceeded PARSE_TIMEOUT_S={deadline_s}s "
+                f"(issue #29); raise PARSE_TIMEOUT_S, switch PARSER, or disable "
+                f"the deadline with PARSE_TIMEOUT_S=0"
+            )
+            raise
         except subprocess.CalledProcessError as e:
             logging.error(f"Error running docling command: {e}")
             if e.stderr:

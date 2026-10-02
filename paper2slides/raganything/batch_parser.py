@@ -6,7 +6,10 @@ with progress reporting and error handling.
 """
 
 import asyncio
+import json
 import logging
+import os
+import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -58,27 +61,38 @@ class BatchParser:
 
     def __init__(
         self,
-        parser_type: str = "mineru",
+        parser_type: Optional[str] = None,
         max_workers: int = 4,
         show_progress: bool = True,
         timeout_per_file: int = 300,
         skip_installation_check: bool = False,
+        skip_parsing: Optional[bool] = None,
     ):
         """
         Initialize batch parser
 
         Args:
-            parser_type: Type of parser to use ("mineru" or "docling")
+            parser_type: Type of parser to use ("mineru" or "docling");
+                None resolves from the PARSER env var (default "mineru")
             max_workers: Maximum number of parallel workers
             show_progress: Whether to show progress bars
             timeout_per_file: Timeout in seconds for each file
             skip_installation_check: Skip parser installation check (useful for testing)
+            skip_parsing: Skip parsing and accept pre-parsed content (issue #29
+                option 3); None resolves from the SKIP_PARSING env var
         """
+        self.logger = logging.getLogger(__name__)
+        if parser_type is None:
+            parser_type = (os.getenv("PARSER") or "mineru").strip().lower() or "mineru"
+        if parser_type not in ("mineru", "docling"):
+            self.logger.warning(
+                f"Unknown PARSER={parser_type!r}, falling back to 'mineru'"
+            )
+            parser_type = "mineru"
         self.parser_type = parser_type
         self.max_workers = max_workers
         self.show_progress = show_progress
         self.timeout_per_file = timeout_per_file
-        self.logger = logging.getLogger(__name__)
 
         # Initialize parser
         if parser_type == "mineru":
@@ -87,6 +101,19 @@ class BatchParser:
             self.parser = DoclingParser()
         else:
             raise ValueError(f"Unsupported parser type: {parser_type}")
+
+        # Issue #29 options 2/3: deadline-orchestration fallback and skip mode
+        if skip_parsing is None:
+            skip_parsing = (os.getenv("SKIP_PARSING", "") or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+        self.skip_parsing = skip_parsing
+        self.parse_fallback_enabled = (
+            os.getenv("PARSE_FALLBACK_ENABLED", "true") or "true"
+        ).strip().lower() in ("1", "true", "yes", "on")
 
         # Check parser installation (optional)
         if not skip_installation_check:
@@ -155,6 +182,69 @@ class BatchParser:
 
         return supported_files
 
+    @staticmethod
+    def _instantiate_parser(parser_type: str):
+        """Instantiate a parser by type name ("mineru" or "docling")."""
+        if parser_type == "mineru":
+            return MineruParser()
+        if parser_type == "docling":
+            return DoclingParser()
+        raise ValueError(f"Unsupported parser type: {parser_type}")
+
+    @staticmethod
+    def _copy_preparsed_file(file_path: str, output_dir: str) -> Tuple[bool, str, Optional[str]]:
+        """Issue #29 Option 3 (SKIP_PARSING): accept pre-parsed content as-is.
+
+        .md/.markdown/.txt files are copied verbatim into output_dir so the
+        downstream markdown collection (`rglob("*.md")`) sees them. MinerU-style
+        content-list JSON (.json) is flattened to markdown (text plus image/
+        table/equation references mirroring what the mineru CLI emits) so a
+        user-provided parse feeds slide generation identically to a real run.
+        """
+        src = Path(file_path)
+        out_root = Path(output_dir)
+        out_root.mkdir(parents=True, exist_ok=True)
+
+        if src.suffix.lower() == ".json":
+            with open(src, "r", encoding="utf-8") as f:
+                content_list = json.load(f)
+            if not isinstance(content_list, list):
+                return False, file_path, (
+                    "SKIP_PARSING JSON must be a MinerU content list (array), "
+                    f"got {type(content_list).__name__}: {src}"
+                )
+
+            lines: List[str] = []
+            for item in content_list:
+                if not isinstance(item, dict):
+                    lines.append(str(item))
+                    continue
+                item_type = str(item.get("type", "text"))
+                if item_type == "text" or item.get("text"):
+                    text = item.get("text")
+                    if text:
+                        lines.append(str(text))
+                img_path = item.get("img_path") or item.get("image_path")
+                if img_path:
+                    lines.append(f"![image]({img_path})")
+                for field in ("table_body", "equation", "html"):
+                    if item.get(field):
+                        lines.append(str(item[field]))
+
+            dest = out_root / f"{src.stem}.md"
+            with open(dest, "w", encoding="utf-8") as f:
+                f.write("\n\n".join(lines) + "\n")
+            return True, file_path, None
+
+        if src.suffix.lower() not in (".md", ".markdown", ".txt"):
+            return False, file_path, (
+                f"SKIP_PARSING expects .md/.txt/MinerU content JSON, got {src}"
+            )
+
+        dest = out_root / src.name
+        shutil.copy2(src, dest)
+        return True, file_path, None
+
     def process_single_file(
         self, file_path: str, output_dir: str, parse_method: str = "auto", **kwargs
     ) -> Tuple[bool, str, Optional[str]]:
@@ -172,6 +262,10 @@ class BatchParser:
         """
         try:
             start_time = time.time()
+
+            # Issue #29 Option 3: accept pre-parsed content as-is
+            if self.skip_parsing:
+                return self._copy_preparsed_file(file_path, output_dir)
 
             # Create output directory if it doesn't exist
             Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -196,6 +290,57 @@ class BatchParser:
         except Exception as e:
             error_msg = f"Failed to process {file_path}: {str(e)}"
             self.logger.error(error_msg)
+
+            # Issue #29: one cross-parser retry for PDFs when the configured
+            # parser failed or was terminated by PARSE_TIMEOUT_S
+            if (
+                self.parse_fallback_enabled
+                and Path(file_path).suffix.lower() == ".pdf"
+                and not self.skip_parsing
+            ):
+                alternate_type = "docling" if self.parser_type == "mineru" else "mineru"
+                try:
+                    alternate = self._instantiate_parser(alternate_type)
+                    self.logger.warning(
+                        f"Falling back to {alternate_type} parser for {file_path}"
+                    )
+                    alt_output_dir = str(Path(output_dir) / f"fallback_{alternate_type}")
+                    content_list = alternate.parse_document(
+                        file_path=file_path,
+                        output_dir=alt_output_dir,
+                        method=parse_method,
+                        **kwargs,
+                    )
+                    alt_dir = Path(alt_output_dir)
+                    markdown = sorted(alt_dir.rglob("*.md"))
+                    if not markdown:
+                        raise RuntimeError(
+                            f"{alternate_type} fallback produced no markdown output"
+                        )
+                    alt_md = markdown[0]
+                    dest_dir = Path(output_dir) / Path(file_path).stem
+                    dest_dir.mkdir(parents=True, exist_ok=True)
+                    dest = dest_dir / alt_md.name
+                    shutil.copy2(alt_md, dest)
+                    try:
+                        images_src = alt_md.parent / "images"
+                        if images_src.is_dir():
+                            shutil.copytree(
+                                images_src, dest_dir / "images", dirs_exist_ok=True
+                            )
+                    except Exception as copy_err:
+                        self.logger.warning(
+                            f"Could not copy fallback images: {copy_err}"
+                        )
+                    self.logger.info(
+                        f"Recovered {file_path} via {alternate_type} fallback -> {dest}"
+                    )
+                    return True, file_path, None
+                except Exception as fallback_error:
+                    self.logger.error(
+                        f"{alternate_type} fallback also failed: {fallback_error}"
+                    )
+
             return False, file_path, error_msg
 
     def process_batch(
@@ -359,9 +504,14 @@ def main():
     parser.add_argument("--output", "-o", required=True, help="Output directory")
     parser.add_argument(
         "--parser",
-        choices=["mineru", "docling"],
-        default="mineru",
-        help="Parser to use",
+        choices=["auto", "mineru", "docling"],
+        default="auto",
+        help="Parser to use ('auto' = PARSER env var, default 'mineru')",
+    )
+    parser.add_argument(
+        "--skip-parsing",
+        action="store_true",
+        help="Skip parsing: inputs must be pre-parsed .md/.txt/MinerU content JSON",
     )
     parser.add_argument(
         "--method",
@@ -396,10 +546,11 @@ def main():
     try:
         # Create batch parser
         batch_parser = BatchParser(
-            parser_type=args.parser,
+            parser_type=None if args.parser == "auto" else args.parser,
             max_workers=args.workers,
             show_progress=not args.no_progress,
             timeout_per_file=args.timeout,
+            skip_parsing=args.skip_parsing,
         )
 
         # Process files

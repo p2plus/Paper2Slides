@@ -27,6 +27,7 @@ const ChatWindow = () => {
   const [length, setLength] = useState('medium') // 'short', 'medium', 'long' (for slides)
   const [density, setDensity] = useState('medium') // 'sparse', 'medium', 'dense' (for poster)
   const [fastMode, setFastMode] = useState(true) // Fast mode: parse only, no RAG indexing (only for paper content, default enabled)
+  const [skipParsing, setSkipParsing] = useState(false) // Issue #29: skip PDF parsing (pre-parsed md/json input)
   
   const [showLeftPanel, setShowLeftPanel] = useState(true)
   const [currentWorkflow, setCurrentWorkflow] = useState(null) // Now includes conversationId
@@ -260,7 +261,7 @@ const ChatWindow = () => {
       messages: [],
       files: [],
       generatedOutputs: [],
-      config: { content, style, output, length, density, fastMode },
+      config: { content, style, output, length, density, fastMode, skipParsing },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -290,6 +291,7 @@ const ChatWindow = () => {
       if (conv.config.length !== undefined) setLength(conv.config.length)
       if (conv.config.density !== undefined) setDensity(conv.config.density)
       if (conv.config.fastMode !== undefined) setFastMode(conv.config.fastMode)
+      if (conv.config.skipParsing !== undefined) setSkipParsing(conv.config.skipParsing)
     }
   }, [conversations])
 
@@ -376,7 +378,7 @@ const ChatWindow = () => {
           slides: resultData.slides || [],
           pptUrl: resultData.ppt_url || null,
           posterUrl: resultData.poster_url || null,
-          config: { content, style, output, length, density, fastMode },
+          config: { content, style, output, length, density, fastMode, skipParsing },
           timestamp: new Date().toISOString()
         }
         
@@ -472,7 +474,7 @@ const ChatWindow = () => {
           messages: [],
           files: [],
           generatedOutputs: [],
-          config: { content, style, output, length, density, fastMode },
+          config: { content, style, output, length, density, fastMode, skipParsing },
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }
@@ -501,7 +503,7 @@ const ChatWindow = () => {
       role: 'user',
       content: text,
       files: filesWithBlobUrls,
-      config: { content, style, output, length, density, fastMode },
+      config: { content, style, output, length, density, fastMode, skipParsing },
       timestamp: new Date().toISOString()
     }
 
@@ -530,7 +532,7 @@ const ChatWindow = () => {
 
     // Save current config to conversation
     updateConversation(convId, {
-      config: { content, style, output, length, density, fastMode }
+      config: { content, style, output, length, density, fastMode, skipParsing }
     })
 
     setIsLoading(true)
@@ -569,6 +571,8 @@ const ChatWindow = () => {
       if (content === 'paper') {
         formData.append('fast_mode', fastMode ? 'true' : 'false')
       }
+      // Issue #29: skip parsing (pre-parsed input)
+      formData.append('skip_parsing', skipParsing ? 'true' : 'false')
       
       files.forEach((file) => {
         formData.append('files', file)
@@ -786,7 +790,7 @@ const ChatWindow = () => {
       id: generateId(),
       role: 'user',
       content: 'Regenerate with current settings',
-      config: { content, style, output, length, density, fastMode },
+      config: { content, style, output, length, density, fastMode, skipParsing },
       timestamp: new Date().toISOString()
     }
 
@@ -831,6 +835,8 @@ const ChatWindow = () => {
       if (content === 'paper') {
         formData.append('fast_mode', fastMode ? 'true' : 'false')
       }
+      // Issue #29: skip parsing (pre-parsed input)
+      formData.append('skip_parsing', skipParsing ? 'true' : 'false')
 
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -1127,6 +1133,8 @@ const ChatWindow = () => {
               setDensity={setDensity}
               fastMode={fastMode}
               setFastMode={setFastMode}
+              skipParsing={skipParsing}
+              setSkipParsing={setSkipParsing}
               compact={messages.length > 0}
               onRegenerate={handleRegenerate}
               isLoading={isLoading}

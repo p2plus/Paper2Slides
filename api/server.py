@@ -152,6 +152,7 @@ async def chat(
     length: Optional[str] = Form(None),  # 'short', 'medium', 'long' (for slides)
     density: Optional[str] = Form(None),  # 'sparse', 'medium', 'dense' (for poster)
     fast_mode: Optional[str] = Form(None),  # 'true' or 'false' - fast mode for paper content
+    skip_parsing: Optional[str] = Form(None),  # 'true' skips PDF parsing (issue #29)
     session_id: Optional[str] = Form(None),  # Existing session ID to reuse files
     files: List[UploadFile] = File([])
 ):
@@ -234,7 +235,9 @@ async def chat(
                     print(f"Saved file: {file_path}")
         
         # Parse fast_mode from string to boolean
-        fast_mode_bool = fast_mode and fast_mode.lower() == 'true'
+        fast_mode_bool = bool(fast_mode and fast_mode.lower() == 'true')
+        # Issue #29: skip parsing entirely (input = pre-parsed md/json)
+        skip_parsing_bool = bool(skip_parsing and skip_parsing.lower() == 'true')
         
         # Log received request
         print(f"\n{'='*60}")
@@ -249,6 +252,8 @@ async def chat(
             print(f"  Density: {density}")
         if content == 'paper' and fast_mode_bool:
             print(f"  Fast Mode: enabled")
+        if skip_parsing_bool:
+            print(f"  Skip Parsing: enabled (pre-parsed input)")
         print(f"{'='*60}\n")
         
         # Prepare initial response with session_id and uploaded files
@@ -280,6 +285,7 @@ async def chat(
             length,
             density,
             fast_mode_bool,
+            skip_parsing_bool,
             session_manager  # Pass session manager to check for cancellation
         )
         
@@ -301,6 +307,7 @@ async def generate_slides_with_pipeline(
     length: Optional[str] = None,
     density: Optional[str] = None,
     fast_mode: bool = False,
+    skip_parsing: bool = False,
     session_manager: SessionManager = None
 ) -> dict:
     """
@@ -316,6 +323,7 @@ async def generate_slides_with_pipeline(
         length: 'short', 'medium', 'long' (for slides)
         density: 'sparse', 'medium', 'dense' (for poster)
         fast_mode: Fast mode for paper content (no RAG indexing)
+        skip_parsing: Skip PDF parsing (issue #29, pre-parsed input)
     
     Returns:
         Dictionary with slides info and output paths
@@ -369,6 +377,7 @@ async def generate_slides_with_pipeline(
         "slides_length": length or "medium",
         "poster_density": density or "medium",
         "fast_mode": fast_mode if content == "paper" else False,  # Fast mode only for paper content
+        "skip_parsing": bool(skip_parsing),
     }
     
     base_dir = get_base_dir(str(OUTPUT_DIR), project_name, content)
@@ -439,7 +448,9 @@ def _update_state_on_error(
     style: str,
     length: Optional[str],
     density: Optional[str],
-    fast_mode: bool
+    fast_mode: bool,
+    skip_parsing: bool,
+    session_manager: Optional[SessionManager] = None
 ):
     """Update state.json when background pipeline fails"""
     from paper2slides.core.state import load_state, save_state
@@ -469,6 +480,7 @@ def _update_state_on_error(
         "slides_length": length or "medium",
         "poster_density": density or "medium",
         "fast_mode": fast_mode if content == "paper" else False,
+        "skip_parsing": bool(skip_parsing),
     }
     
     config_dir = get_config_dir(base_dir, config)
@@ -496,6 +508,7 @@ async def run_pipeline_background(
     length: Optional[str],
     density: Optional[str],
     fast_mode: bool = False,
+    skip_parsing: bool = False,
     session_manager: SessionManager = None
 ):
     """
@@ -514,7 +527,7 @@ async def run_pipeline_background(
         
         logger.info(f"Starting background pipeline for session {session_id[:8]}")
         result = await generate_slides_with_pipeline(
-            session_id, message, files, content, output_type, style, length, density, fast_mode, session_manager
+            session_id, message, files, content, output_type, style, length, density, fast_mode, skip_parsing, session_manager
         )
         
         # Check if cancelled after completion
@@ -538,7 +551,7 @@ async def run_pipeline_background(
         
         # Also update the state.json file to reflect the failure
         try:
-            _update_state_on_error(session_id, str(e), files, content, output_type, style, length, density, fast_mode)
+            _update_state_on_error(session_id, str(e), files, content, output_type, style, length, density, fast_mode, skip_parsing)
         except Exception as state_err:
             logger.error(f"Failed to update state file: {state_err}")
     finally:

@@ -166,6 +166,7 @@ python -m paper2slides --list
 | `--length` | Slides length: `short`, `medium`, `long` | `short` |
 | `--density` | Poster density: `sparse`, `medium`, `dense` | `medium` |
 | `--fast` | Fast mode: skip RAG indexing | `false` |
+| `--skip-parsing` | Skip PDF parsing: input must be pre-parsed markdown (`.md`/`.txt`) or MinerU content JSON (see [PDF Parsing Options](#-pdf-parsing-options)) | `false` |
 | `--parallel` | Enable parallel slide generation: `--parallel` uses 2 workers, `--parallel N` uses N workers | `1` (sequential without this option) |
 | `--from-stage` | Force restart from stage: `rag`, `summary`, `plan`, `generate` | Auto-detect |
 | `--debug` | Enable debug logging | `false` |
@@ -287,6 +288,35 @@ outputs/
 | `academic` | Clean, professional academic presentation style |
 | `doraemon` | Colorful, friendly style with illustrations |
 | `custom` | Any text description for LLM-generated style |
+
+### 📄 PDF Parsing Options
+
+> [!WARNING]
+> MinerU OCR can hang on large PDFs (10+ pages, e.g. long arXiv papers) — the
+> parsing stage used to wait forever with no progress. Since this fix, every
+> parser subprocess runs under a hard deadline instead of blocking indefinitely.
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `PARSER` | PDF parser backend: `mineru` (OCR-based, heavyweight) or `docling` (lighter, no GPU) | `mineru` |
+| `PARSE_METHOD` | MinerU parsing method: `auto`, `ocr`, or `txt` | `auto` |
+| `PARSE_TIMEOUT_S` | Hard deadline in seconds for the parser subprocess; `0` disables the deadline | `1800` |
+| `PARSE_FALLBACK_ENABLED` | On PDF parser failure/timeout, retry once with the other parser | `true` |
+| `SKIP_PARSING` | Skip parsing: provide pre-parsed markdown (`.md`/`.txt`) or MinerU content JSON as input | `false` |
+
+- The deadline applies to both parsers (MinerU terminates the whole subprocess
+  tree, including spawned model workers; Docling bounds its CLI calls).
+- Fallback output is written under `rag_output/fallback_<parser>/`; the
+  recovered markdown is copied next to the primary output so downstream stages
+  pick it up automatically.
+- In the web interface, enable **Skip PDF parsing** in the configuration dialog
+  (or set `skip_parsing='true'` on `POST /api/chat`) and upload pre-parsed
+  markdown/text instead of a PDF.
+- CLI equivalent: `python -m paper2slides --input paper.md --skip-parsing ...`
+
+> [!TIP]
+> For a 40-page arXiv paper on a Mac without GPU, `PARSER=docling` plus the
+> default deadline usually finishes in minutes where MinerU used to hang.
 
 ### Image Generation Providers
 
