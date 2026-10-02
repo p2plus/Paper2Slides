@@ -102,7 +102,7 @@ export default class Paper2SlidesPlugin extends Plugin {
 		this.addRibbonIcon('presentation', 'Generate with Paper2Slides', async () => {
 			const file = this.app.workspace.getActiveFile();
 			if (!file || !this.isSupportedSource(file)) {
-				new Notice('Open a PDF or Markdown note first.');
+				new Notice('Open a supported document (PDF, MD, TXT, Office, images) first.');
 				return;
 			}
 			await this.generateSlides(file);
@@ -203,12 +203,28 @@ export default class Paper2SlidesPlugin extends Plugin {
 		});
 	}
 
+	// Keep in sync with paper2slides/file_formats.py (SUPPORTED_FILE_EXTENSIONS),
+	// which the API adopts since the document-input-formats fix.
+	static readonly supportedSourceExtensions: readonly string[] = [
+		'pdf', 'md', 'txt',
+		'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx',
+		'png', 'jpeg', 'jpg', 'bmp', 'tiff', 'tif', 'gif', 'webp',
+	];
+
+	private static readonly generalContentExtensions = new Set(['md', 'txt']);
+
 	isSupportedSource(file: TFile): boolean {
-		return file.extension === 'pdf' || file.extension === 'md';
+		return Paper2SlidesPlugin.supportedSourceExtensions.includes(
+			file.extension.toLowerCase(),
+		);
 	}
 
 	private getContentType(file: TFile): ContentType {
-		return file.extension === 'md' ? 'general' : 'paper';
+		return Paper2SlidesPlugin.generalContentExtensions.has(
+			file.extension.toLowerCase(),
+		)
+			? 'general'
+			: 'paper';
 	}
 
 	private getStyleArgument(): string {
@@ -925,7 +941,7 @@ class Paper2SlidesSettingTab extends PluginSettingTab {
 		const activeFile = this.app.workspace.getActiveFile();
 		const activeFileDesc = activeFile && this.plugin.isSupportedSource(activeFile)
 			? `Current file: ${activeFile.path}`
-			: 'Open a PDF or Markdown note to run Paper2Slides from here.';
+			: 'Open a supported document (PDF, MD, TXT, Office, images) to run Paper2Slides from here.';
 
 		new Setting(containerEl)
 			.setName('Current file')
@@ -1345,7 +1361,7 @@ class Paper2SlidesSettingTab extends PluginSettingTab {
 
 		containerEl.createEl('h3', { text: 'Where to use it' });
 		containerEl.createEl('p', {
-			text: 'Use the ribbon button, command palette, or the right-click menu on a PDF or Markdown file. The plugin also exposes a re-import command and a stop command for long runs.',
+			text: 'Use the ribbon button, command palette, or the right-click menu on a supported document file. The plugin also exposes a re-import command and a stop command for long runs.',
 		});
 	}
 }

@@ -76,6 +76,12 @@ var Z_AI_CODING_PLAN_URL = "https://api.z.ai/api/coding/paas/v4/";
 var LM_STUDIO_BASE_URL = "http://127.0.0.1:1234/v1";
 var OLLAMA_BASE_URL = "http://localhost:11434/v1";
 var PROVIDER_REQUEST_TIMEOUT_MS = 1e4;
+var SUPPORTED_SOURCE_EXTENSIONS = [
+  "pdf", "md", "txt",
+  "doc", "docx", "ppt", "pptx", "xls", "xlsx",
+  "png", "jpeg", "jpg", "bmp", "tiff", "tif", "gif", "webp"
+];
+var GENERAL_CONTENT_EXTENSIONS = new Set(["md", "txt"]);
 var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
   constructor() {
     super(...arguments);
@@ -89,7 +95,7 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
     this.addRibbonIcon("presentation", "Generate with Paper2Slides", async () => {
       const file = this.app.workspace.getActiveFile();
       if (!file || !this.isSupportedSource(file)) {
-        new import_obsidian.Notice("Open a PDF or Markdown note first.");
+        new import_obsidian.Notice("Open a supported document (PDF, MD, TXT, Office, images) first.");
         return;
       }
       await this.generateSlides(file);
@@ -97,7 +103,7 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
     this.addRibbonIcon("share", "Lend/Share with Paper2Slides", async () => {
       const file = this.app.workspace.getActiveFile();
       if (!file || !this.isSupportedSource(file)) {
-        new import_obsidian.Notice("Open a PDF or Markdown note first.");
+        new import_obsidian.Notice("Open a supported document (PDF, MD, TXT, Office, images) first.");
         return;
       }
       if (!this.settings.lendEnabled) {
@@ -234,10 +240,14 @@ var Paper2SlidesPlugin = class extends import_obsidian.Plugin {
     });
   }
   isSupportedSource(file) {
-    return file.extension === "pdf" || file.extension === "md";
+    return SUPPORTED_SOURCE_EXTENSIONS.includes(
+      (file.extension || "").toLowerCase()
+    );
   }
   getContentType(file) {
-    return file.extension === "md" ? "general" : "paper";
+    return GENERAL_CONTENT_EXTENSIONS.has((file.extension || "").toLowerCase())
+      ? "general"
+      : "paper";
   }
   getStyleArgument() {
     if (this.settings.style === "custom") {
@@ -871,7 +881,7 @@ var Paper2SlidesSettingTab = class extends import_obsidian.PluginSettingTab {
       text: "You can trigger the plugin from the settings tab, the left ribbon, the command palette, or the file right-click menu."
     });
     const activeFile = this.app.workspace.getActiveFile();
-    const activeFileDesc = activeFile && this.plugin.isSupportedSource(activeFile) ? `Current file: ${activeFile.path}` : "Open a PDF or Markdown note to run Paper2Slides from here.";
+    const activeFileDesc = activeFile && this.plugin.isSupportedSource(activeFile) ? `Current file: ${activeFile.path}` : "Open a supported document (PDF, MD, TXT, Office, images) to run Paper2Slides from here.";
     new import_obsidian.Setting(containerEl).setName("Current file").setDesc(activeFileDesc).addButton((button) => button.setButtonText("Generate").setDisabled(!activeFile || !this.plugin.isSupportedSource(activeFile) || !!this.plugin.activeRun).onClick(async () => {
       if (activeFile && this.plugin.isSupportedSource(activeFile)) {
         await this.plugin.generateSlides(activeFile);
@@ -1100,7 +1110,7 @@ var Paper2SlidesSettingTab = class extends import_obsidian.PluginSettingTab {
     }));
     containerEl.createEl("h3", { text: "Where to use it" });
     containerEl.createEl("p", {
-      text: "Use the ribbon button, command palette, or the right-click menu on a PDF or Markdown file. The plugin also exposes a re-import command and a stop command for long runs."
+      text: "Use the ribbon button, command palette, or the right-click menu on a supported document file. The plugin also exposes a re-import command and a stop command for long runs."
     });
   }
 };
